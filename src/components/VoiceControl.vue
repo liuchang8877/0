@@ -95,7 +95,24 @@ export default defineComponent({
       window.API_KEY = API_KEY;
 
       addMessage('欢迎来到聊天室！', 'bot');
-      // initializeIatRecorder(); // Call the function to avoid unused declaration error
+      // 获取 id="result" 的内容并赋值给 inputMessage
+      // 监听 id="result" 的变化
+      const resultElement = document.getElementById('result');
+      if (resultElement) {
+        // 创建一个 MutationObserver 实例
+        const observer = new MutationObserver((mutationsList) => {
+          mutationsList.forEach((mutation) => {
+            if (mutation.type === 'childList' || mutation.type === 'characterData') {
+              // 更新 inputMessage 值
+              inputMessage.value = resultElement.textContent || '';
+            }
+          });
+        });
+
+        // 配置要监听的变化类型
+        observer.observe(resultElement, { childList: true, subtree: true, characterData: true });
+      }
+
     });
 
     function initializeIatRecorder() {
@@ -160,6 +177,10 @@ export default defineComponent({
 </script>
 
 <style scoped>
+#result {
+  display: none;
+}
+
 .chat-app {
   display: flex;
   flex-direction: column;
