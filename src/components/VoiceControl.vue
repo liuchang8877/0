@@ -1,3 +1,4 @@
+
 <template>
   <div class="chat-app">
     <header class="chat-header">
@@ -6,7 +7,6 @@
         <img src="../assets/robot-add.png" alt="logo" class="logo" />
         <span class="app-name">chatgpt</span>
         <div id="result">语音信息：</div>
-
       </div>
     </header>
 
@@ -19,7 +19,6 @@
       <div class="chat-input">
         <input v-model="inputMessage" @keyup.enter="sendMessage" placeholder="输入消息..." />
         <button @click="sendMessage">发送</button>
-        <!-- <button @click="toggleRecording">{{ recordingButtonText }}</button> -->
         <button id="btn_control02">开始录音</button>
       </div>
     </div>
@@ -27,8 +26,7 @@
 </template>
 
 <script lang="ts">
-
-import { defineComponent, ref, onMounted, nextTick } from 'vue';
+import { defineComponent, ref, onMounted, nextTick, onBeforeUnmount } from 'vue';
 
 interface Message {
   text: string;
@@ -49,7 +47,7 @@ declare global {
 export default defineComponent({
   name: 'VoiceControl',
   setup() {
-    const messages = ref<Message[]>([]); // Specify the type of messages
+    const messages = ref<Message[]>([]);
     const inputMessage = ref('');
     const chatMessages = ref(null);
     const recordingButtonText = ref('语音');
@@ -58,13 +56,13 @@ export default defineComponent({
     const APPID = "e744e845";
     const API_SECRET = "NzNmYzZkNDE0ZjJmNTZjNjQyMGM2ZWI5";
     const API_KEY = "472fb85982b85765712ea7cefc0b7f95";
+    const YOUR_SSE_ENDPOINT = "https://zhiyuejiayuan.id5.cn:10443/prod-api/applet/beida/chat";
 
     onMounted(() => {
       const scripts = [
         '../../iat-js-demo/example/crypto-js.js',
         '../../iat-js-demo/dist/index.umd.js',
         '../../iat-js-demo/example/iat/index.js',
-        // '../../iat-js-demo/example/iat/input-file.js'
       ];
 
       const loadScript = (src: string): Promise<void> => {
@@ -82,7 +80,6 @@ export default defineComponent({
         for (const src of scripts) {
           await loadScript(src);
         }
-        // initializeIatRecorder();
       };
 
       loadScriptsSequentially().catch(error => {
@@ -95,42 +92,72 @@ export default defineComponent({
       window.API_KEY = API_KEY;
 
       addMessage('欢迎来到聊天室！', 'bot');
-      // 获取 id="result" 的内容并赋值给 inputMessage
+
       // 监听 id="result" 的变化
       const resultElement = document.getElementById('result');
       if (resultElement) {
-        // 创建一个 MutationObserver 实例
         const observer = new MutationObserver((mutationsList) => {
           mutationsList.forEach((mutation) => {
             if (mutation.type === 'childList' || mutation.type === 'characterData') {
-              // 更新 inputMessage 值
               inputMessage.value = resultElement.textContent || '';
             }
           });
         });
 
-        // 配置要监听的变化类型
         observer.observe(resultElement, { childList: true, subtree: true, characterData: true });
       }
 
+      // 初始化 SSE 连接
+      const eventSource = new EventSource(YOUR_SSE_ENDPOINT); // 替换为你的 SSE 接口地址
+      eventSource.addEventListener('message', (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          handleSSEData(data);
+        } catch (error) {
+          console.error('Failed to parse SSE data:', error);
+        }
+      });
+
+      onBeforeUnmount(() => {
+        eventSource.close();
+      });
     });
 
-    function initializeIatRecorder() {
-      if (typeof window.IatRecorder === 'function') {
-        iatRecorder = new window.IatRecorder({
-          onResult: (text: string) => {
-            inputMessage.value = text;
-            if (inputMessage.value.trim()) {
-              addMessage(inputMessage.value, 'user');
-            }
-          },
-          onError: (error: any) => {
-            console.error('识别错误:', error);
-          }
-        });
-      } else {
-        console.error('IatRecorder is not a constructor', window.IatRecorder);
-      }
+    // 使用 Fetch 发送消息到服务器
+    function sendMessageToServer(message: string) {
+
+      var myHeaders = new Headers();
+      // myHeaders.append("User-Agent", "Apifox/1.0.0 (https://apifox.com)");
+      myHeaders.append("Content-Type", "application/json");
+      myHeaders.append("Accept", "*/*");
+      // myHeaders.append("Host", "210.12.135.100:10443");
+      myHeaders.append("Connection", "keep-alive");
+
+      var raw = JSON.stringify({
+        "content": message
+      });
+
+      var requestOptions = {
+        method: 'POST',
+        headers: myHeaders,
+        body: raw,
+        redirect: 'follow'
+      };
+
+      fetch(YOUR_SSE_ENDPOINT, requestOptions)
+        .then(response => response.text())
+        .then(result => {
+
+          // 解析每一行数据
+          const data = result.trim().split('\n').filter(line => line.startsWith('data:')).map(line => JSON.parse(line.replace('data: ', '')));
+          //data.forEach(item => handleSSEData(item)); // 处理每条数据
+          // 找到最后一条数据并处理
+          const lastItem = data[data.length - 1]; // 取最后一条
+          handleSSEData(lastItem)
+          //console.log(result);
+
+        })
+        .catch(error => console.log('error', error));
     }
 
     const toggleRecording = () => {
@@ -146,9 +173,13 @@ export default defineComponent({
     const sendMessage = () => {
       if (inputMessage.value.trim()) {
         addMessage(inputMessage.value, 'user');
-        setTimeout(() => {
-          addMessage('这是一个自动回复: ' + inputMessage.value, 'bot');
-        }, 1000);
+
+        //发送服务器
+        sendMessageToServer(inputMessage.value);
+
+        // setTimeout(() => {
+        //   addMessage('这是一个自动回复: ' + inputMessage.value, 'bot');
+        // }, 1000);
         inputMessage.value = '';
       }
     };
@@ -157,9 +188,59 @@ export default defineComponent({
       messages.value.push({ text, type });
       nextTick(() => {
         if (chatMessages.value) {
-          // chatMessages.value.scrollTop = chatMessages.value.scrollHeight;
+          chatMessages.value.scrollTop = chatMessages.value.scrollHeight;
         }
       });
+    };
+
+    const handleSSEData = (response: any) => {
+      // 打印原始响应，查看类型和内容
+      console.log("handleSSEData - response:", response);
+
+      // 如果 `response` 是字符串，则尝试解析 JSON
+      let data;
+      if (typeof response === 'string') {
+        try {
+          data = JSON.parse(response); // 解析 JSON 字符串
+        } catch (error) {
+          console.error('Failed to parse JSON:', error);
+          return;
+        }
+      } else {
+        // 如果 `response` 已经是对象，直接使用
+        data = response;
+      }
+
+      switch (data.event) {
+        case 'request_accepted':
+          addMessage(`请求已接受：${data.time}`, 'bot');
+          break;
+        case 'generate_search_queries':
+          addMessage(`生成的搜索查询: ${data.data.join(', ')}`, 'bot');
+          break;
+        case 'on_text':
+          addMessage(data.data, 'bot');
+          break;
+        case 'refer_docs':
+          const docs = data.data.map((doc: any) => `标题: ${doc.title}, 来源: ${doc.source}`).join('\n');
+          addMessage(`参考文档:\n${docs}`, 'bot');
+          break;
+        case 'chat_reply':
+          handleChatReply(data.data);
+          break;
+        case 'full_chat_reply':
+          addMessage(data.data, 'bot');
+          break;
+        default:
+          console.log('未知事件类型:', data.event);
+      }
+    };
+
+    let chatReplyBuffer = '';
+
+    const handleChatReply = (text: string) => {
+      chatReplyBuffer += text;
+      addMessage(chatReplyBuffer, 'bot');
     };
 
     return {
@@ -172,8 +253,6 @@ export default defineComponent({
     };
   }
 });
-
-
 </script>
 
 <style scoped>
@@ -228,13 +307,6 @@ export default defineComponent({
   flex-grow: 1;
   background-color: #fff;
   border-radius: 8px 8px 0 0;
-}
-
-.chat-title {
-  padding: 10px 20px;
-  font-size: 16px;
-  border-bottom: 1px solid #ddd;
-  background-color: #ffffff;
 }
 
 .chat-messages {
