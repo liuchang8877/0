@@ -127,11 +127,8 @@ export default defineComponent({
     function sendMessageToServer(message: string) {
 
       var myHeaders = new Headers();
-      // myHeaders.append("User-Agent", "Apifox/1.0.0 (https://apifox.com)");
       myHeaders.append("Content-Type", "application/json");
       myHeaders.append("Accept", "*/*");
-      // myHeaders.append("Host", "210.12.135.100:10443");
-      myHeaders.append("Connection", "keep-alive");
 
       var raw = JSON.stringify({
         "content": message
@@ -143,6 +140,11 @@ export default defineComponent({
         body: raw,
         redirect: 'follow'
       };
+
+      console.log("sendMessageToServer myHeaders",JSON.stringify(myHeaders));
+
+      //输出请求日志
+      console.log("sendMessageToServer ip content",YOUR_SSE_ENDPOINT,JSON.stringify(requestOptions));
 
       fetch(YOUR_SSE_ENDPOINT, requestOptions)
         .then(response => response.text())
@@ -196,6 +198,11 @@ export default defineComponent({
     const handleSSEData = (response: any) => {
       // 打印原始响应，查看类型和内容
       console.log("handleSSEData - response:", response);
+      if (typeof response === 'undefined')
+      {
+        console.log("handleSSEData - error:",response);
+        return;
+      }
 
       // 如果 `response` 是字符串，则尝试解析 JSON
       let data;
